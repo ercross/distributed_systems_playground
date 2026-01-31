@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+
+
+  order-api:
+    build:
+      context: ./order_api
+      dockerfile: ../Dockerfile
+    ports:
+      - "15002:8080"
+    volumes:
+      - ./order_api/:/app
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 128M
+    environment:
+      - GOMAXPROCS=1
+      - GOMEMLIMIT=100MiB
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  order-processor:
+    build:
+      context: ./order_processor
+      dockerfile: ../Dockerfile
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./order_processor/:/app
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 128M
+    environment:
+      - GOMAXPROCS=1
+      - GOMEMLIMIT=100MiB
+    restart: unless-stopped
+    networks:
+      - app-network
+    depends_on:
+      - payment-service
+
+  payment-service:
+    build:
+      context: ./payment_service
+      dockerfile: ../Dockerfile
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./payment_service/:/app
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 128M
+    environment:
+      - GOMAXPROCS=1
+      - GOMEMLIMIT=100MiB
+    restart: unless-stopped
+    networks:
+      - app-network
+
+
+networks:
+  app-network:
+    driver: bridge
