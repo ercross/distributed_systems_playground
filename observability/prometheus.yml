@@ -1,0 +1,43 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: "order-api"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["order-api:9091"]
+    relabel_configs:
+      - source_labels: [ __address__ ]
+        target_label: instance
+        replacement: "order-api"
+
+  - job_name: "order-processor"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["order-processor:9092"]
+    relabel_configs:
+      - source_labels: [ __address__ ]
+        target_label: instance
+        replacement: "order-processor"
+
+  - job_name: "payment-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["payment-service:9093"]
+    relabel_configs:
+      - source_labels: [ __address__ ]
+        target_label: instance
+        replacement: "payment-service"
+
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["cadvisor:8080"]
+    relabel_configs:
+      - source_labels: [ __address__ ]
+        target_label: instance
+        replacement: "cadvisor"
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: [ "localhost:9090" ]

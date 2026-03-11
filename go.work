@@ -1,7 +1,8 @@
 go 1.25.6
 
 use (
- ./order_api
- ./order_processor
- ./payment_service
+ ./services/order_api
+ ./services/order_processor
+ ./services/payment_service
+ ./shared
 )

@@ -1,71 +1,149 @@
 version: '3.8'
 
 services:
-
-
   order-api:
+    mem_limit: 128m
+    cpus: "0.50"
+    container_name: dsp-order-api
     build:
-      context: ./order_api
-      dockerfile: ../Dockerfile
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_DIR: services/order_api
     ports:
-      - "15002:8080"
+      - "8081:8081" # HTTP API
+      - "9091:9091"   # Prometheus metrics
     volumes:
-      - ./order_api/:/app
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 128M
+      - ./services/order_api/:/app
     environment:
-      - GOMAXPROCS=1
-      - GOMEMLIMIT=100MiB
+      HTTP_PORT: "8081"
+      METRICS_PORT: "9091"
+      ORDER_PROCESSOR_URL: "http://order-processor:8082"
+
+      # ── Chaos knobs ──────────────────────────────────
+      ORDER_API_LATENCY_ENABLED: "true"
+      ORDER_API_LATENCY_MIN_MS: "10"
+      ORDER_API_LATENCY_MAX_MS: "40"
+      ORDER_API_FAILURE_ENABLED: "true"
+      ORDER_API_FAILURE_RATE: "0.005"
+      ORDER_API_TIMEOUT_ENABLED: "false"
+      ORDER_API_TIMEOUT_MS: "1500"
+      ORDER_API_TIMEOUT_RATE: "0.002"
+      ORDER_API_CRASH_ENABLED: "false"
+      ORDER_API_CRASH_RATE: "0.0005"
+      GOMAXPROCS: 1
+      GOMEMLIMIT: 100MiB # low soft-limit memory to force GC to kick-in more often, thereby adding to the chaos
+
     restart: unless-stopped
-    networks:
-      - app-network
 
   order-processor:
+    container_name: dsp-order-processor
     build:
-      context: ./order_processor
-      dockerfile: ../Dockerfile
-    ports:
-      - "8081:8081"
-    volumes:
-      - ./order_processor/:/app
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 128M
-    environment:
-      - GOMAXPROCS=1
-      - GOMEMLIMIT=100MiB
-    restart: unless-stopped
-    networks:
-      - app-network
-    depends_on:
-      - payment-service
-
-  payment-service:
-    build:
-      context: ./payment_service
-      dockerfile: ../Dockerfile
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_DIR: services/order_processor
     ports:
       - "8082:8082"
+      - "9092:9092"   # Prometheus metrics
     volumes:
-      - ./payment_service/:/app
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 128M
+      - ./services/order_processor/:/app
+    mem_limit: 128m
+    cpus: "0.50"
     environment:
-      - GOMAXPROCS=1
-      - GOMEMLIMIT=100MiB
+      GOMAXPROCS: 1
+      GOMEMLIMIT: 100MiB
+      HTTP_PORT: "8082"
+      METRICS_PORT: "9092"
+      PAYMENT_SERVICE_URL: "http://payment-service:8083"
+
+      # ── Chaos knobs ──────────────────────────────────
+      ORDER_PROCESSOR_LATENCY_ENABLED: "true"
+      ORDER_PROCESSOR_LATENCY_MIN_MS: "80"
+      ORDER_PROCESSOR_LATENCY_MAX_MS: "250"
+      ORDER_PROCESSOR_FAILURE_ENABLED: "true"
+      ORDER_PROCESSOR_FAILURE_RATE: "0.01"
+      ORDER_PROCESSOR_TIMEOUT_ENABLED: "true"
+      ORDER_PROCESSOR_TIMEOUT_MS: "2500"
+      ORDER_PROCESSOR_TIMEOUT_RATE: "0.02"
+      ORDER_PROCESSOR_CRASH_ENABLED: "false"
+      ORDER_PROCESSOR_CRASH_RATE: "0.001"
     restart: unless-stopped
-    networks:
-      - app-network
 
+  payment-service:
+    mem_limit: 128m
+    cpus: "0.50"
+    container_name: dsp-payment-service
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_DIR: services/payment_service
+    ports:
+      - "8083:8083"
+      - "9093:9093"   # Prometheus metrics
+    volumes:
+      - ./services/payment_service/:/app
+    environment:
+      GOMAXPROCS: 1
+      GOMEMLIMIT: 100MiB
+      HTTP_PORT: "8083"
+      METRICS_PORT: "9093"
 
-networks:
-  app-network:
-    driver: bridge
+      # ── Payment-specific failures ─────────────────────
+      PAYMENT_DECLINE_RATE: "0.06"
+      PAYMENT_INSUFFICIENT_FUNDS_RATE: "0.03"
+      PAYMENT_BANK_TIMEOUT_RATE: "0.02"
+      PAYMENT_BANK_TIMEOUT_MS: "4000"
+      PAYMENT_BANK_HANG_ENABLED: "true"
+      PAYMENT_BANK_HANG_RATE: "0.003"
+
+      # ── Chaos knobs ──────────────────────────────────
+      PAYMENT_SERVICE_LATENCY_ENABLED: "true"
+      PAYMENT_SERVICE_LATENCY_MIN_MS: "100"
+      PAYMENT_SERVICE_LATENCY_MAX_MS: "350"
+      PAYMENT_SERVICE_FAILURE_ENABLED: "true"
+      PAYMENT_SERVICE_FAILURE_RATE: "0.01"
+      PAYMENT_SERVICE_TIMEOUT_ENABLED: "true"
+      PAYMENT_SERVICE_TIMEOUT_MS: "3000"
+      PAYMENT_SERVICE_TIMEOUT_RATE: "0.015"
+      PAYMENT_SERVICE_CRASH_ENABLED: "false"
+      PAYMENT_SERVICE_CRASH_RATE: "0.001"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dsp-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+    depends_on:
+      - order-api
+      - order-processor
+      - payment-service
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dsp-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:

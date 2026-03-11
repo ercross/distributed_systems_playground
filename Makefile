@@ -38,8 +38,5 @@ stats:
 	docker -f $(COMPOSE_FILE) -p $(PROJECT_NAME) stats --no-stream
 
 deploy: build up
-	@echo "Deployment complete!"
-	@echo "Run 'make logs' to see service logs"
-	@echo "Run 'make test' to send a test order"
 
 redeploy: restart logs
