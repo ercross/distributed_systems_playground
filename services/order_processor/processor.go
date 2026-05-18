@@ -60,8 +60,9 @@ func (p *Processor) Start() {
 
 			p.metrics.QueueDepth.Dec()
 			p.metrics.OrdersDequeuedTotal.Inc()
+			p.metrics.ProcessingSpawnedTotal.Inc()
 
-			go p.processOrder(&item.Order)
+			go p.processOrder(&item.Order, item.EnqueuedAt)
 		}
 	}()
 }
@@ -82,9 +83,11 @@ func (p *Processor) QueueDepth() int {
 	return p.queue.Len()
 }
 
-func (p *Processor) processOrder(order *models.Order) {
+func (p *Processor) processOrder(order *models.Order, enqueuedAt time.Time) {
 	p.metrics.InFlight.Inc()
 	defer p.metrics.InFlight.Dec()
+
+	p.metrics.QueueWaitDuration.Observe(time.Since(enqueuedAt).Seconds())
 
 	start := time.Now()
 	defer func() {
@@ -138,6 +141,9 @@ func (p *Processor) processOrder(order *models.Order) {
 }
 
 func (p *Processor) callPaymentService(order *models.Order) (*models.PaymentResponse, error) {
+	p.metrics.PaymentCallsInFlight.Inc()
+	defer p.metrics.PaymentCallsInFlight.Dec()
+
 	req := models.PaymentRequest{
 		OrderID: order.ID,
 		UserID:  order.UserID,

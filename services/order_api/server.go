@@ -18,12 +18,14 @@ type Server struct {
 	processorURL string
 	httpClient   *http.Client
 	metrics      *Metrics
+	admission    *simpleAdmissionControl
 }
 
-func NewServer(processorURL string, metrics *Metrics) *Server {
+func NewServer(processorURL string, metrics *Metrics, admission *simpleAdmissionControl) *Server {
 	return &Server{
 		processorURL: processorURL,
 		metrics:      metrics,
+		admission:    admission,
 		httpClient: &http.Client{
 			Timeout: 0,
 		},
@@ -34,6 +36,7 @@ func (s *Server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.metrics.OrdersRejectedTotal.Inc()
+		s.metrics.ValidationRejectionsTotal.Inc()
 		utils.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "invalid JSON: " + err.Error(),
 		})
@@ -42,11 +45,24 @@ func (s *Server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	if req.UserID == "" || len(req.Items) == 0 {
 		s.metrics.OrdersRejectedTotal.Inc()
+		s.metrics.ValidationRejectionsTotal.Inc()
 		utils.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "user_id and items are required",
 		})
 		return
 	}
+
+	// Admission check: must succeed before any order is created or work is spawned.
+	if !s.admission.tryAcquireSlot() {
+		s.metrics.OrdersRejectedTotal.Inc()
+		s.metrics.AdmissionRejectionsTotal.Inc()
+		s.metrics.AdmissionInUse.Set(float64(s.admission.slotsInUse()))
+		utils.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "order admission temporarily unavailable",
+		})
+		return
+	}
+	s.metrics.AdmissionInUse.Set(float64(s.admission.slotsInUse()))
 
 	var total float64
 	for _, item := range req.Items {
@@ -78,6 +94,12 @@ func (s *Server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) forwardToOrderProcessor(order models.Order) {
+	// Slot is held for the full forwarding lifecycle, including all retries and hangs.
+	defer func() {
+		s.admission.releaseSlot()
+		s.metrics.AdmissionInUse.Set(float64(s.admission.slotsInUse()))
+	}()
+
 	s.metrics.ProcessorForwardInFlight.Inc()
 	defer s.metrics.ProcessorForwardInFlight.Dec()
 

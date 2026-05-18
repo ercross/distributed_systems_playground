@@ -1,6 +1,6 @@
 {
-  "title": "Distributed Systems - Failure First (No Guards v0.1.0)",
-  "uid": "dist-sys-failure-v010-tight",
+  "title": "Distributed Systems - Failure First (v0.2.0 Admission Control)",
+  "uid": "dist-sys-failure-v020-admission-control",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "5s",
@@ -11,14 +11,14 @@
   "tags": [
     "distributed-systems",
     "failure-first",
-    "no-guards",
-    "v0.1.0"
+    "admission-control",
+    "v0.2.0"
   ],
   "panels": [
     {
       "id": 1,
       "type": "row",
-      "title": "System Shape",
+      "title": "Ingress Admission Control",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -32,13 +32,13 @@
       "title": "Incoming order requests at edge (req/s)",
       "gridPos": {
         "h": 6,
-        "w": 6,
+        "w": 8,
         "x": 0,
         "y": 1
       },
       "targets": [
         {
-          "expr": "sum(rate(order_api_http_requests_total{method=\"POST\",path=\"/orders\"}[1m]))",
+          "expr": "sum(rate(order_api_http_requests_total{method=\"POST\",path=\"/orders\"}[30s]))",
           "legendFormat": "POST /orders req/s"
         }
       ]
@@ -46,29 +46,75 @@
     {
       "id": 3,
       "type": "timeseries",
-      "title": "Edge request latency p95 (POST /orders)",
+      "title": "Admission slots in use vs configured limit",
       "gridPos": {
         "h": 6,
-        "w": 6,
-        "x": 6,
+        "w": 8,
+        "x": 8,
         "y": 1
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(order_api_http_request_duration_seconds_bucket{method=\"POST\",path=\"/orders\"}[1m])) by (le))",
-          "legendFormat": "p95"
+          "expr": "order_api_admission_in_use",
+          "legendFormat": "in_use"
+        },
+        {
+          "expr": "order_api_admission_limit",
+          "legendFormat": "limit"
         }
       ]
     },
     {
       "id": 4,
       "type": "timeseries",
-      "title": "Forward goroutines in-flight",
+      "title": "Accepted vs rejected orders (rate)",
       "gridPos": {
         "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "targets": [
+        {
+          "expr": "rate(order_api_orders_accepted_total[30s])",
+          "legendFormat": "accepted/s"
+        },
+        {
+          "expr": "rate(order_api_orders_rejected_total[30s])",
+          "legendFormat": "rejected/s"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Admission vs validation rejections (rate)",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 7
+      },
+      "targets": [
+        {
+          "expr": "rate(order_api_admission_rejections_total[30s])",
+          "legendFormat": "admission_rejections/s"
+        },
+        {
+          "expr": "rate(order_api_validation_rejections_total[30s])",
+          "legendFormat": "validation_rejections/s"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Forwarding goroutines in-flight",
+      "gridPos": {
+        "h": 7,
         "w": 6,
         "x": 12,
-        "y": 1
+        "y": 7
       },
       "targets": [
         {
@@ -78,14 +124,101 @@
       ]
     },
     {
-      "id": 5,
+      "id": 7,
+      "type": "timeseries",
+      "title": "Forwarding duration p95",
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 18,
+        "y": 7
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(order_api_processor_forward_duration_seconds_bucket[30s])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Internal Flow Without Back-Pressure",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Processor enqueue vs dequeue rate",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 15
+      },
+      "targets": [
+        {
+          "expr": "rate(order_processor_orders_enqueued_total[30s])",
+          "legendFormat": "enqueued/s"
+        },
+        {
+          "expr": "rate(order_processor_orders_dequeued_total[30s])",
+          "legendFormat": "dequeued/s"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Processing goroutines spawned (rate)",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 15
+      },
+      "targets": [
+        {
+          "expr": "rate(order_processor_processing_spawned_total[30s])",
+          "legendFormat": "spawned/s"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Processor in-flight vs payment calls in-flight",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 15
+      },
+      "targets": [
+        {
+          "expr": "order_processor_in_flight",
+          "legendFormat": "processor_in_flight"
+        },
+        {
+          "expr": "order_processor_payment_calls_in_flight",
+          "legendFormat": "payment_calls_in_flight"
+        }
+      ]
+    },
+    {
+      "id": 12,
       "type": "timeseries",
       "title": "Processor queue depth",
       "gridPos": {
-        "h": 6,
-        "w": 6,
-        "x": 18,
-        "y": 1
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 22
       },
       "targets": [
         {
@@ -95,113 +228,13 @@
       ]
     },
     {
-      "id": 6,
-      "type": "row",
-      "title": "Processor Accumulation",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 7
-      }
-    },
-    {
-      "id": 7,
-      "type": "timeseries",
-      "title": "Enqueue vs dequeue rate",
-      "gridPos": {
-        "h": 7,
-        "w": 8,
-        "x": 0,
-        "y": 8
-      },
-      "targets": [
-        {
-          "expr": "rate(order_processor_orders_enqueued_total[1m])",
-          "legendFormat": "enqueued/s"
-        },
-        {
-          "expr": "rate(order_processor_orders_dequeued_total[1m])",
-          "legendFormat": "dequeued/s"
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "type": "timeseries",
-      "title": "Processor in-flight work",
-      "gridPos": {
-        "h": 7,
-        "w": 8,
-        "x": 8,
-        "y": 8
-      },
-      "targets": [
-        {
-          "expr": "order_processor_in_flight",
-          "legendFormat": "in_flight"
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "type": "timeseries",
-      "title": "Processor outcomes (rate)",
-      "gridPos": {
-        "h": 7,
-        "w": 8,
-        "x": 16,
-        "y": 8
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(order_processor_orders_processed_total[1m])) by (outcome)",
-          "legendFormat": "{{outcome}}"
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "type": "timeseries",
-      "title": "Seconds since last successful processing",
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 15
-      },
-      "targets": [
-        {
-          "expr": "time() - order_processor_last_processed_timestamp_seconds",
-          "legendFormat": "seconds_since_last_success"
-        }
-      ]
-    },
-    {
-      "id": 11,
-      "type": "timeseries",
-      "title": "Payment call latency p95 from processor",
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 15
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(order_processor_payment_call_duration_seconds_bucket[1m])) by (le))",
-          "legendFormat": "p95"
-        }
-      ]
-    },
-    {
-      "id": 12,
+      "id": 13,
       "type": "timeseries",
       "title": "Oldest queued work age (seconds)",
       "gridPos": {
         "h": 7,
-        "w": 12,
-        "x": 0,
+        "w": 8,
+        "x": 8,
         "y": 22
       },
       "targets": [
@@ -212,25 +245,76 @@
       ]
     },
     {
-      "id": 13,
+      "id": 14,
+      "type": "timeseries",
+      "title": "Queue wait duration p95",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 22
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(order_processor_queue_wait_duration_seconds_bucket[30s])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Processor outcomes (rate)",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 29
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(order_processor_orders_processed_total[30s])) by (outcome)",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Seconds since last successful processing",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 29
+      },
+      "targets": [
+        {
+          "expr": "time() - order_processor_last_processed_timestamp_seconds",
+          "legendFormat": "seconds_since_last_success"
+        }
+      ]
+    },
+    {
+      "id": 17,
       "type": "row",
-      "title": "Dependency Blocking",
+      "title": "Downstream Pressure Chain",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 29
+        "y": 36
       }
     },
     {
-      "id": 14,
+      "id": 18,
       "type": "stat",
       "title": "Payment service up",
       "gridPos": {
         "h": 6,
         "w": 6,
         "x": 0,
-        "y": 30
+        "y": 37
       },
       "targets": [
         {
@@ -256,14 +340,14 @@
       }
     },
     {
-      "id": 15,
+      "id": 19,
       "type": "stat",
       "title": "Bank hang enabled",
       "gridPos": {
         "h": 6,
         "w": 6,
         "x": 6,
-        "y": 30
+        "y": 37
       },
       "targets": [
         {
@@ -289,14 +373,14 @@
       }
     },
     {
-      "id": 16,
+      "id": 20,
       "type": "timeseries",
       "title": "Payment transactions in-flight",
       "gridPos": {
         "h": 6,
         "w": 6,
         "x": 12,
-        "y": 30
+        "y": 37
       },
       "targets": [
         {
@@ -306,14 +390,31 @@
       ]
     },
     {
-      "id": 17,
+      "id": 21,
       "type": "timeseries",
-      "title": "Bank hangs in-flight",
+      "title": "Bank gateway calls in-flight",
       "gridPos": {
         "h": 6,
         "w": 6,
         "x": 18,
-        "y": 30
+        "y": 37
+      },
+      "targets": [
+        {
+          "expr": "payment_service_bank_gateway_calls_in_flight",
+          "legendFormat": "gateway_calls_in_flight"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Bank hangs in-flight",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 43
       },
       "targets": [
         {
@@ -323,76 +424,80 @@
       ]
     },
     {
-      "id": 18,
+      "id": 23,
       "type": "timeseries",
-      "title": "Payment outcomes (increase over 1m)",
+      "title": "Processor payment latency p95 vs bank gateway latency p95",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(order_processor_payment_call_duration_seconds_bucket[30s])) by (le))",
+          "legendFormat": "processor_to_payment_p95"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(payment_service_bank_gateway_duration_seconds_bucket[30s])) by (le))",
+          "legendFormat": "bank_gateway_p95"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "Payment outcomes (increase over 30s)",
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 36
+        "y": 50
       },
       "targets": [
         {
-          "expr": "sum(increase(payment_service_outcomes_total[1m])) by (outcome)",
+          "expr": "sum(increase(payment_service_outcomes_total[30s])) by (outcome)",
           "legendFormat": "{{outcome}}"
         }
       ]
     },
     {
-      "id": 19,
+      "id": 25,
       "type": "timeseries",
       "title": "Payment processing latency p95",
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 36
+        "y": 50
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(payment_service_processing_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(payment_service_processing_duration_seconds_bucket[30s])) by (le))",
           "legendFormat": "p95"
         }
       ]
     },
     {
-      "id": 20,
-      "type": "timeseries",
-      "title": "Bank gateway latency p95",
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 43
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(payment_service_bank_gateway_duration_seconds_bucket[1m])) by (le))",
-          "legendFormat": "p95"
-        }
-      ]
-    },
-    {
-      "id": 21,
+      "id": 26,
       "type": "row",
       "title": "Runtime Consequences",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 57
       }
     },
     {
-      "id": 22,
+      "id": 27,
       "type": "timeseries",
       "title": "Goroutines by service",
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 51
+        "y": 58
       },
       "targets": [
         {
@@ -402,14 +507,14 @@
       ]
     },
     {
-      "id": 23,
+      "id": 28,
       "type": "timeseries",
       "title": "RSS memory by service",
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 51
+        "y": 58
       },
       "targets": [
         {
@@ -419,18 +524,18 @@
       ]
     },
     {
-      "id": 24,
+      "id": 29,
       "type": "timeseries",
       "title": "CPU usage (cores) by service",
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 58
+        "y": 65
       },
       "targets": [
         {
-          "expr": "sum by (job) (rate(process_cpu_seconds_total{job=~\"dsp-order-api|dsp-order-processor|dsp-payment-service\"}[1m]))",
+          "expr": "sum by (job) (rate(process_cpu_seconds_total{job=~\"dsp-order-api|dsp-order-processor|dsp-payment-service\"}[30s]))",
           "legendFormat": "{{job}}"
         }
       ]

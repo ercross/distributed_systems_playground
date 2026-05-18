@@ -13,9 +13,10 @@ type Metrics struct {
 	PaymentProcessingDuration prometheus.Histogram
 	BankGatewayCallDuration   prometheus.Histogram
 
-	TransactionsInFlight prometheus.Gauge
-	BankHangsInFlight    prometheus.Gauge
-	BankHangEnabled      prometheus.Gauge
+	TransactionsInFlight     prometheus.Gauge
+	BankGatewayCallsInFlight prometheus.Gauge
+	BankHangsInFlight        prometheus.Gauge
+	BankHangEnabled          prometheus.Gauge
 }
 
 func NewMetrics(reg prometheus.Registerer) *Metrics {
@@ -49,6 +50,10 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "payment_service_transactions_in_flight",
 			Help: "Number of payment requests currently being processed.",
 		}),
+		BankGatewayCallsInFlight: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "payment_service_bank_gateway_calls_in_flight",
+			Help: "Number of requests currently inside simulated bank gateway processing.",
+		}),
 		BankHangsInFlight: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "payment_service_bank_hangs_in_flight",
 			Help: "Number of payment requests currently stuck in the simulated unbounded bank hang.",
@@ -66,6 +71,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		m.PaymentProcessingDuration,
 		m.BankGatewayCallDuration,
 		m.TransactionsInFlight,
+		m.BankGatewayCallsInFlight,
 		m.BankHangsInFlight,
 		m.BankHangEnabled,
 	)

@@ -40,3 +40,13 @@ stats:
 deploy: build up
 
 redeploy: restart logs
+
+
+# Generate grafana dashboard from spec
+generate-dashboard:
+	python3 observability/grafana/provisioning/dashboards/builder/compiler.py
+
+
+# Run k6 test
+run-k6-test:
+	k6 run test_tools/k6/v0.2.0-saturation-test.js

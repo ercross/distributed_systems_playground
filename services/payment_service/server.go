@@ -95,6 +95,9 @@ func (s *Server) handlePay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.metrics.BankGatewayCallsInFlight.Inc()
+	defer s.metrics.BankGatewayCallsInFlight.Dec()
+
 	// 0) Optional unbounded hang mode
 	if s.payment.BankHangEnabled && rand.Float64() < s.payment.BankHangRate {
 		s.metrics.BankHangsInFlight.Inc()
